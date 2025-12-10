@@ -1,20 +1,13 @@
 function multi_robot_rigidbody_maze_demo
-% Multi-robot cooperative carry using:
-%   - pkgMechanics.RigidBodyPlanar (4 vertices = 4 robots)
-%   - BFS path planning in a maze (for COM)
-%   - PI velocity control at each vertex (forces at corners)
-%
-% Requirements:
-%   - pkgMechanics.RigidBodyPlanar class on the MATLAB path
 
 close all; clc;
 
-%% === WORLD AND GRID PARAMETERS ===
+%% WORLD AND GRID PARAMETERS
 worldX  = [-5, 10];    % x-limits
 worldY  = [-4,  6];    % y-limits
 gridRes = 0.1;         % occupancy grid resolution
 
-%% === OBSTACLES (maze-like) ===
+%% OBSTACLES (maze-like)
 % Rectangles: [x_left, y_bottom, width, height]
 obstacles = [ ...
     -1.5, -2.5, 2.0, 1.0;    % bottom left block
@@ -25,13 +18,13 @@ obstacles = [ ...
      1.0,  2.5, 2.0, 1.0;    % upper block 1
      5.0,  2.5, 2.0, 1.0];   % upper block 2
 
-%% === RIGID BODY (OBJECT + 4 ROBOTS AT VERTICES) ===
+%% RIGID BODY (OBJECT + 4 ROBOTS AT VERTICES)
 
 numRobots   = 4;
-robotRadius = 0.25;     % just for drawing circles
-objectSize  = 1.2;      % side length (bigger than robots)
+robotRadius = 0.25;     
+objectSize  = 1.2;      
 
-% Initial object center (COM target position)
+% Initial object center
 objectStart = [0; 0];
 
 % Define initial vertex positions for a square around objectStart
@@ -49,10 +42,10 @@ rb.translation.velocity = [0; 0];   % start at rest
 
 % Get initial COM from rb
 rb.getStates;
-com0 = rb.translation.position(:);   % 2x1
-objectStart = com0;                  % use this as start in planner
+com0 = rb.translation.position(:);  
+objectStart = com0;                  
 
-%% === SIMULATION PARAMETERS (FOR FORCE CONTROL) ===
+%% SIMULATION PARAMETERS (FOR FORCE CONTROL)
 
 cycle      = 0.05;      % time step (s)
 vNominal   = 0.7;       % nominal COM speed along path (m/s)
@@ -77,7 +70,7 @@ vDesLog        = nan(2, maxSteps);                % desired COM velocity
 vertVelLog     = nan(2, numRobots, maxSteps);     % vertex velocities
 forceLog       = nan(2, numRobots, maxSteps);     % vertex forces
 
-%% === FIGURE SETUP ===
+%% FIGURE SETUP
 
 fig = figure('Name', 'RigidBody maze + PI force control', ...
              'NumberTitle', 'off');
@@ -99,9 +92,9 @@ end
 
 % Draw initial rigid body polygon + robots as circles
 rb.getStates;
-vertPos = [rb.verticeList.position];   % 2 x 4
+vertPos = [rb.verticeList.position];   
 
-objectPatch = patch(vertPos(1,:), vertPos(2,:), [0 0 0]);  % filled polygon
+objectPatch = patch(vertPos(1,:), vertPos(2,:), [0 0 0]);  
 
 robotPatches = gobjects(numRobots, 1);
 robotLabels  = gobjects(numRobots, 1);
@@ -127,7 +120,7 @@ comPlot   = plot(ax, comTrail(1), comTrail(2), 'b-', 'LineWidth', 1.5);
 
 drawnow;
 
-%% === ASK USER FOR GOAL POSITION ===
+%% ASK USER FOR GOAL POSITION
 axes(ax);
 [gx, gy] = ginput(1);
 objectGoal = [gx; gy];
@@ -135,7 +128,7 @@ plot(ax, objectGoal(1), objectGoal(2), 'rx', 'MarkerSize', 10, 'LineWidth', 2);
 
 fprintf('Planning path with BFS...\n');
 
-%% === PLAN PATH FOR COM (BFS ON GRID WITH INFLATED OBSTACLES) ===
+%% PLAN PATH FOR COM (BFS ON GRID WITH INFLATED OBSTACLES)
 waypoints = planPath(objectStart', objectGoal', obstacles, worldX, worldY, gridRes);
 
 % Draw the path as a visible dashed line
@@ -143,35 +136,35 @@ plot(ax, waypoints(:,1), waypoints(:,2), 'm--', 'LineWidth', 1.2);
 
 fprintf('Following path with RigidBody + PI control...\n');
 
-%% === FOLLOW PATH WITH RIGID BODY + PI FORCE CONTROL ===
+%% FOLLOW PATH WITH RIGID BODY + PI FORCE CONTROL
 
 currentSegment = 1;
 numSegs        = size(waypoints, 1) - 1;
 
 for step = 1:maxSteps
 
-    if ~ishandle(fig), break; end  % user closed window
+    if ~ishandle(fig), break; end  
 
-    % --- Read current state ---
+    % Read current state
     rb.getStates;
-    com = rb.translation.position(:);     % COM position (2x1)
+    com = rb.translation.position(:);     
 
-    % --- Distance to final goal ---
+    % Distance to final goal
     distToGoal = norm(com - objectGoal);
 
-    % --- Logging for analysis ---
+    % Logging for analysis
     timeLog(step)       = step * cycle;
     comLog(:, step)     = com;
     goalDistLog(step)   = distToGoal;
     segIdxLog(step)     = currentSegment;
 
-    % --- Check if we are at the final goal ---
+    % Check if we are at the final goal
     if distToGoal < reachTol
         fprintf('Reached goal at t = %.2f s\n', step*cycle);
         break;
     end
 
-    % --- Advance along waypoints if close to the next segment target ---
+    % Advance along waypoints if close to the next segment target
     if currentSegment < numSegs
         segTarget = waypoints(currentSegment + 1, :)';
         distToSegTarget = norm(com - segTarget);
@@ -180,14 +173,14 @@ for step = 1:maxSteps
         end
     end
 
-    % --- Get current local segment target ---
+    % Get current local segment target
     if currentSegment >= numSegs
         segTarget = objectGoal;
     else
         segTarget = waypoints(currentSegment + 1, :)';
     end
 
-    % --- Desired COM velocity (towards segTarget) ---
+    % Desired COM velocity (towards segTarget)
     dir  = segTarget - com;
     dist = norm(dir);
     if dist > 1e-6
@@ -196,27 +189,27 @@ for step = 1:maxSteps
         dir = [0; 0];
     end
 
-    vDesCOM = vNominal * dir;                 % 2x1
-    vDesAll = repmat(vDesCOM, 1, numRobots);  % 2xN: same desired vel at each vertex
+    vDesCOM = vNominal * dir;                 
+    vDesAll = repmat(vDesCOM, 1, numRobots);  
 
-    % --- Vertex velocities from RigidBody ---
-    vertVel = [rb.verticeList.velocity];  % 2xN
+    % Vertex velocities from RigidBody 
+    vertVel = [rb.verticeList.velocity];  
 
-    % --- PI CONTROL ON VELOCITY ERROR (per vertex) ---
+    % PI CONTROL ON VELOCITY ERROR (per vertex)
     % Define error as e = v_des - v_actual
-    velError = vDesAll - vertVel;        % 2xN
+    velError = vDesAll - vertVel;        
 
     % Integrate error over time
     forceInt = forceInt + velError * cycle;
 
     % PI control: u = Kp*e + Ki*integral(e)
-    forceCtrlList = Kp * velError + Ki * forceInt;   % 2xN
+    forceCtrlList = Kp * velError + Ki * forceInt;   
 
     % Saturate forces per component to model actuator limits
     forceCtrlList = min(max(forceCtrlList, -maxForce), maxForce);
 
-    % --- Extra logging for proofs ---
-    segDistLog(step)     = norm(com - segTarget);       % distance to current waypoint
+    % Extra logging for proofs
+    segDistLog(step)     = norm(com - segTarget);       
     vDesLog(:, step)     = vDesCOM;
     vertVelLog(:,:,step) = vertVel;
     forceLog(:,:,step)   = forceCtrlList;
@@ -224,14 +217,14 @@ for step = 1:maxSteps
     % Log velocity error norm (for plots)
     velErrNormLog(step) = norm(velError(:));
 
-    % --- Update rigid body dynamics ---
+    % Update rigid body dynamics
     rb.updateStates(forceCtrlList, cycle);
 
-    % --- Visual update ---
+    % Visual update
 
     % Update vertices and polygon
     rb.getStates;
-    vertPos = [rb.verticeList.position];   % 2xN
+    vertPos = [rb.verticeList.position];   
 
     set(objectPatch, 'XData', vertPos(1,:), 'YData', vertPos(2,:));
 
@@ -253,7 +246,7 @@ end
 
 fprintf('Simulation finished.\n');
 
-%% === Trim logs to actual length ===
+%% Trim logs to actual length
 lastStep = find(~isnan(timeLog), 1, 'last');
 if isempty(lastStep)
     return;
@@ -270,7 +263,7 @@ vDesLog       = vDesLog(:, 1:lastStep);
 vertVelLog    = vertVelLog(:,:,1:lastStep);
 forceLog      = forceLog(:,:,1:lastStep);
 
-%% === Post-simulation plots for the report ===
+%% Post-simulation plots for the report
 
 % 1) COM trajectory vs planned path
 figure('Name', 'COM trajectory');
@@ -344,7 +337,7 @@ legend('Location', 'best');
 
 end % main function
 
-%% === Helper: Path planning using BFS on an inflated grid ===
+%% Helper: Path planning using BFS on an inflated grid
 function waypoints = planPath(startPos, goalPos, obstacles, worldX, worldY, gridRes)
 % startPos, goalPos: [x y]
 xMin = worldX(1); xMax = worldX(2);
@@ -357,10 +350,10 @@ ny = round((yMax - yMin) / gridRes) + 1;
 occ = false(ny, nx);
 
 % Inflate obstacles by safety margin to account for object + robots
-safetyMargin = 0.8;   % increase if robots still look too close to walls
+safetyMargin = 0.8;   
 
 for k = 1:size(obstacles, 1)
-    rect = obstacles(k, :);  % [x_left, y_bottom, width, height]
+    rect = obstacles(k, :);  
 
     % Original rectangle
     x1 = rect(1);
@@ -496,7 +489,7 @@ prevDir = path(2, :) - path(1, :);
 for i = 2:(size(path,1)-1)
     dir = path(i+1, :) - path(i, :);
     if any(dir ~= prevDir)
-        path2(end+1, :) = path(i, :); %#ok<AGROW>
+        path2(end+1, :) = path(i, :); 
         prevDir = dir;
     end
 end
